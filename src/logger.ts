@@ -1,6 +1,3 @@
-import fs from "fs";
-import path from "path";
-
 export enum LogLevel {
   ERROR = 0,
   WARN = 1,
@@ -10,16 +7,10 @@ export enum LogLevel {
 
 class Logger {
   private logLevel: LogLevel;
-  private logStream: fs.WriteStream;
 
   constructor() {
     const nodeEnv = process.env.NODE_ENV || "SANDBOX";
     this.logLevel = nodeEnv === "PRODUCTION" ? LogLevel.ERROR : LogLevel.DEBUG;
-
-    const logDir = process.env.LOG_DIR || path.join(process.cwd(), "logs");
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-    const logFile = path.join(logDir, "app.log");
-    this.logStream = fs.createWriteStream(logFile, { flags: "a" });
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -32,16 +23,10 @@ class Logger {
     return `[${timestamp}] [${level}] ${message}${metaStr}`;
   }
 
-  private write(level: string, message: string, meta?: any): void {
-    const formatted = this.formatMessage(level, message, meta);
-    this.logStream.write(formatted + "\n");
-  }
-
   error(message: string, meta?: any): void {
     if (this.shouldLog(LogLevel.ERROR)) {
       const msg = this.formatMessage("ERROR", message, meta);
       console.error(msg);
-      this.write("ERROR", message, meta);
     }
   }
 
@@ -49,7 +34,6 @@ class Logger {
     if (this.shouldLog(LogLevel.WARN)) {
       const msg = this.formatMessage("WARN", message, meta);
       console.warn(msg);
-      this.write("WARN", message, meta);
     }
   }
 
@@ -57,7 +41,6 @@ class Logger {
     if (this.shouldLog(LogLevel.INFO)) {
       const msg = this.formatMessage("INFO", message, meta);
       console.log(msg);
-      this.write("INFO", message, meta);
     }
   }
 
@@ -65,14 +48,12 @@ class Logger {
     if (this.shouldLog(LogLevel.DEBUG)) {
       const msg = this.formatMessage("DEBUG", message, meta);
       console.log(msg);
-      this.write("DEBUG", message, meta);
     }
   }
 
   dev(message: string, meta?: any): void {
     const msg = this.formatMessage("DEV", message, meta);
     console.log(msg);
-    this.write("DEV", message, meta);
   }
 }
 

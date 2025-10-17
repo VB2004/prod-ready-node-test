@@ -117,8 +117,7 @@ useradd --system --no-create-home --shell /bin/false promtail
 
 # ========== PROMTAIL CONFIG ==========
 # Creates the Promtail configuration file with scrape jobs.
-mkdir -p $APP_DIR/logs
-chown -R ec2-user:ec2-user $APP_DIR/logs
+chown -R ec2-user:ec2-user /home/ec2-user/.pm2/logs
 
 tee /etc/promtail-config.yaml >/dev/null <<EOF
 server:
@@ -148,7 +147,7 @@ scrape_configs:
           job: nodejs-backend
           instance: $INSTANCE_ID
           host: $HOSTNAME
-        __path__: $APP_DIR/logs/*.log
+        __path__: /home/ec2-user/.pm2/logs/*.log
 EOF
 
 # ========== CREATE SYSTEMD SERVICE FOR PROMTAIL ==========
