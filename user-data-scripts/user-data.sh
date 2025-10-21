@@ -10,8 +10,8 @@ BRANCH="main"
 APP_DIR="/opt/app"
 APP_PORT=3000
 # TODO: REPLACE THE IP BELOW
-LOKI_URL="http://10.0.15.18:3100/loki/api/v1/push"
-PROMTAIL_VERSION="3.0.0"
+LOKI_URL="http://10.0.7.183:3100/loki/api/v1/push"
+PROMTAIL_VERSION="2.8.8"
 
 # ========== GET INSTANCE METADATA USING IMDSv2 ==========
 # Retrieves instance metadata securely using a session token.
@@ -123,9 +123,10 @@ tee /etc/promtail-config.yaml >/dev/null <<EOF
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
+  log_level: debug
 
 positions:
-  filename: /var/log/positions.yaml
+  filename: /tmp/positions.yaml
 
 clients:
   - url: $LOKI_URL
@@ -133,7 +134,8 @@ clients:
 scrape_configs:
   - job_name: system
     static_configs:
-      - targets: ['localhost']
+      - targets:
+          - localhost
         labels:
           job: ec2-system
           instance: $INSTANCE_ID
@@ -142,7 +144,8 @@ scrape_configs:
 
   - job_name: app
     static_configs:
-      - targets: ['localhost']
+      - targets:
+          - localhost
         labels:
           job: nodejs-backend
           instance: $INSTANCE_ID

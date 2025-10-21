@@ -94,23 +94,21 @@ mkdir -p $GRAFANA_DIR/data
 # Create Loki configuration file
 tee $LOKI_DIR/config/loki-config.yaml >/dev/null <<EOF
 auth_enabled: false
+
 server:
   http_listen_port: $LOKI_PORT
   grpc_listen_port: 9095
+  log_level: info
 
-common:
-  replication_factor: 1
+distributor:
   ring:
-    instance_addr: 127.0.0.1
     kvstore:
       store: inmemory
-  path_prefix: /tmp/loki
-  storage:
-    s3:
-      bucketnames: $S3_BUCKET_NAME
-      region: $REGION
 
 ingester:
+  wal:
+    enabled: true
+    dir: /loki/wal
   chunk_idle_period: 5m
   chunk_target_size: 1048576
   max_chunk_age: 1h
@@ -119,61 +117,51 @@ ingester:
       kvstore:
         store: inmemory
       replication_factor: 1
-    heartbeat_period: 1m
-  wal:
-    enabled: true
-    dir: /loki/wal
+
+querier:
+  query_ingesters_within: 2h
+
+query_range:
+  align_queries_with_step: true
+  max_retries: 5
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+        ttl: 24h
+
+limits_config:
+  split_queries_by_interval: 15m
+  max_query_series: 100000
+  max_cache_freshness_per_query: 10m
+  retention_period: 168h
 
 schema_config:
   configs:
-  - from: 2020-05-15
-    store: tsdb
-    object_store: s3
-    schema: v13
-    index:
-      prefix: index_
-      period: 24h
+    - from: 2023-01-01
+      store: tsdb
+      object_store: s3
+      schema: v12
+      index:
+        prefix: loki_index_
+        period: 24h
+
+storage_config:
+  aws:
+    region: <>
+    bucketnames: <>
+    access_key_id: <>
+    secret_access_key: <>
+    s3forcepathstyle: false
+  tsdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/cache
+    cache_ttl: 24h
 
 compactor:
   working_directory: /loki/compactor
   shared_store: s3
-
-storage_config:
-  boltdb_shipper:
-    active_index_directory: /loki/index
-    cache_location: /loki/cache
-    resync_interval: 5m
-    shared_store: s3
-    cache_ttl: 24h
-  aws:
-    s3:
-      bucketnames: $S3_BUCKET_NAME
-      region: $REGION
-      endpoint: s3.$REGION.amazonaws.com
-
-limits_config:
-  enforce_metric_name: false
-  reject_old_samples: false
-  reject_old_samples_max_age: 168h
-
-chunk_store_config:
-  max_look_back_period: 0s
-
-ruler:
-  enable_api: true
-  enable_alertmanager_v2: true
-  enable_local_storage: true
-  storage:
-    type: s3
-    s3:
-      bucketnames: $S3_BUCKET_NAME
-      region: $REGION
-      endpoint: s3.$REGION.amazonaws.com
-
-query_range:
-  split_queries_by_interval: 15m
-  max_retries: 5
-  parallelism: 32
 
 EOF
 
@@ -182,7 +170,7 @@ tee /opt/docker-compose.yaml >/dev/null <<EOF
 version: "3.7"
 services:
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:2.8.8
     container_name: loki
     ports:
       - "3100:3100"
