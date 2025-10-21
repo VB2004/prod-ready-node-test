@@ -28,48 +28,61 @@ chmod +x /usr/local/bin/docker-compose
 ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
 # ========== NGINX REVERSE PROXY ==========
-# Installs and configures Nginx, creating necessary directories to prevent failure.
+echo "🚀 Installing and configuring Nginx..."
 yum install -y nginx
+
+# Ensure directory structure exists
 mkdir -p /etc/nginx/sites-available
 mkdir -p /etc/nginx/sites-enabled
 
-# Use `tee` with `sudo` for reliable file creation with root permissions.
+# Ensure nginx.conf includes sites-enabled directory
+if ! grep -q "include /etc/nginx/sites-enabled/\*" /etc/nginx/nginx.conf; then
+    echo "🔧 Adding include for sites-enabled to nginx.conf"
+    sed -i '/http {/a\    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+fi
+
+# Create backend reverse proxy config
 tee /etc/nginx/sites-available/backend.conf >/dev/null <<EOF
 server {
     listen 80;
     server_name _;
-    location / {
-        proxy_pass http://localhost:$GRAFANA_PORT;
-        proxy_http_version 1.1;
 
+    # Proxy Grafana (port 3000)
+    location / {
+        proxy_pass http://127.0.0.1:$GRAFANA_PORT;
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        proxy_set_header Connection "upgrade";
         proxy_cache_bypass \$http_upgrade;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
+    # Proxy Loki (port 3100)
     location /loki/ {
-        proxy_pass http://127.0.0.1:3100/;
+        proxy_pass http://127.0.0.1:$LOKI_PORT/;
         proxy_http_version 1.1;
-
         proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_cache_bypass \$http_upgrade;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_cache_bypass \$http_upgrade;
     }
 }
 EOF
 
+# Enable the site and reload nginx
 ln -sf /etc/nginx/sites-available/backend.conf /etc/nginx/sites-enabled/backend.conf
 rm -f /etc/nginx/sites-enabled/default
+
+nginx -t
 systemctl restart nginx
 systemctl enable nginx
+
 
 # ========== LOKI & GRAFANA CONFIGURATION ==========
 # Use a common parent directory for all configurations and data
@@ -86,35 +99,52 @@ server:
   grpc_listen_port: 9095
 
 common:
-  storage:
-    filesystem:
-      directory: /loki/chunks
   replication_factor: 1
   ring:
     instance_addr: 127.0.0.1
     kvstore:
       store: inmemory
+  path_prefix: /tmp/loki
+  storage:
+    s3:
+      bucketnames: $S3_BUCKET_NAME
+      region: $REGION
+
+ingester:
+  chunk_idle_period: 5m
+  chunk_target_size: 1048576
+  max_chunk_age: 1h
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+    heartbeat_period: 1m
+  wal:
+    enabled: true
+    dir: /loki/wal
 
 schema_config:
   configs:
-    - from: 2020-10-24
-      store: boltdb-shipper
-      object_store: s3
-      schema: v11
-      index:
-        prefix: loki_index_
-        period: 24h
+  - from: 2020-05-15
+    store: tsdb
+    object_store: s3
+    schema: v13
+    index:
+      prefix: index_
+      period: 24h
 
 compactor:
   working_directory: /loki/compactor
   shared_store: s3
 
-
 storage_config:
   boltdb_shipper:
-    active_index_directory: /loki/boltdb-shipper-active
-    cache_location: /loki/boltdb-shipper-cache
+    active_index_directory: /loki/index
+    cache_location: /loki/cache
     resync_interval: 5m
+    shared_store: s3
+    cache_ttl: 24h
   aws:
     s3:
       bucketnames: $S3_BUCKET_NAME
@@ -139,6 +169,12 @@ ruler:
       bucketnames: $S3_BUCKET_NAME
       region: $REGION
       endpoint: s3.$REGION.amazonaws.com
+
+query_range:
+  split_queries_by_interval: 15m
+  max_retries: 5
+  parallelism: 32
+
 EOF
 
 # Docker Compose file - Writes to /opt/docker-compose.yaml
@@ -177,4 +213,7 @@ EOF
 cd /opt
 docker-compose up -d
 
+sleep 2
+curl http://localhost:3100/ready
+sleep 15
 curl http://localhost:3100/ready
