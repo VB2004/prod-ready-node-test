@@ -10,7 +10,7 @@ BRANCH="main"
 APP_DIR="/opt/app"
 APP_PORT=3000
 # TODO: REPLACE THE IP BELOW
-LOKI_URL="http://10.0.2.232:3100/loki/api/v1/push"
+LOKI_URL="http://10.0.15.18:3100/loki/api/v1/push"
 PROMTAIL_VERSION="3.0.0"
 
 # ========== GET INSTANCE METADATA USING IMDSv2 ==========
@@ -147,7 +147,7 @@ scrape_configs:
           job: nodejs-backend
           instance: $INSTANCE_ID
           host: $HOSTNAME
-        __path__: /home/ec2-user/.pm2/logs/*.log
+          __path__: /home/ec2-user/.pm2/logs/*.log
 EOF
 
 # ========== CREATE SYSTEMD SERVICE FOR PROMTAIL ==========
@@ -158,7 +158,7 @@ Description=Promtail service
 After=network.target
 
 [Service]
-User=promtail
+User=root
 ExecStart=$PROMTAIL_HOME/promtail -config.file=/etc/promtail-config.yaml
 Restart=always
 
