@@ -217,7 +217,7 @@ EOF
 cd /opt
 docker-compose up -d
 
-sleep 10
+sleep 1
 curl -f http://localhost:3100/ready || echo "Loki not ready yet, will retry in 15s..."
 sleep 15
 curl -f http://localhost:3100/ready || echo "Still waiting for Loki..."
